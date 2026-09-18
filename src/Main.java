@@ -2,7 +2,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Scanner;
-
+import utils.Database;
 import Enumes.Status;
 import classes.Enrollment;
 import classes.Parents;
@@ -11,9 +11,16 @@ import exceptions.EntityNotFound;
 import repositories.EnrollmentRepo;
 import repositories.MemoryEnrollRepo;
 import services.EnrollService;
+import java.sql.Connection;
+import java.sql.SQLException;
 
 public class Main {
     public static void main(String[] args) {
+        try (Connection connection = Database.getConnection()) {
+            System.out.println("Database connected successfully.");
+        } catch (SQLException error) {
+            System.out.println("Database connection error: "+ error.getMessage());
+        }
         ArrayList<Parents> parents = new ArrayList<>();
         EnrollmentRepo repository = new MemoryEnrollRepo();
         EnrollService service = new EnrollService(repository);
