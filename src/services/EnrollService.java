@@ -4,14 +4,17 @@ import classes.Enrollment;
 import exceptions.BusinessException;
 import exceptions.EntityNotFound;
 import repositories.EnrollmentRepo;
+import repositories.ParentRepo;
 
 import java.util.List;
 
 public class EnrollService {
     private final EnrollmentRepo repository;
+    private final ParentRepo parentRepository;
 
-    public EnrollService(EnrollmentRepo repository) {
+    public EnrollService(EnrollmentRepo repository, ParentRepo parentRepository) {
         this.repository = repository;
+        this.parentRepository = parentRepository;
     }
 
     public void create(Enrollment enrollment) {
@@ -25,6 +28,12 @@ public class EnrollService {
         if (repository.findById(enrollment.getId()) != null) {
             throw new BusinessException(
                     "Enrollment with this ID already exists."
+            );
+        }
+
+        if (!parentRepository.existsById(enrollment.getParentId())) {
+            throw new BusinessException(
+                "Parent with this ID does not exist."
             );
         }
 

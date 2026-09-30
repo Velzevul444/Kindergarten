@@ -3,16 +3,26 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Scanner;
 import utils.Database;
+import utils.ExcelExporter;
 import Enumes.Status;
 import classes.Enrollment;
 import classes.Parents;
 import exceptions.BusinessException;
 import exceptions.EntityNotFound;
 import repositories.EnrollmentRepo;
-import repositories.MemoryEnrollRepo;
+import repositories.JdbcEnrollRepo;
+import repositories.JdbcParentRepo;
+import repositories.ParentRepo;
 import services.EnrollService;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 
 public class Main {
     public static void main(String[] args) {
@@ -21,27 +31,11 @@ public class Main {
         } catch (SQLException error) {
             System.out.println("Database connection error: "+ error.getMessage());
         }
-        ArrayList<Parents> parents = new ArrayList<>();
-        EnrollmentRepo repository = new MemoryEnrollRepo();
-        EnrollService service = new EnrollService(repository);
+        EnrollmentRepo repository = new JdbcEnrollRepo();
+        ParentRepo parentRepository = new JdbcParentRepo();
+        EnrollService service = new EnrollService(repository, parentRepository);
 
-        parents.add(new Parents("Ivan", 1, "ivan@i", "88005353535"));
-        parents.add(new Parents("Anna", 2, "anna@i", "88005353536"));
-        parents.add(new Parents("Petr", 3, "petr@i", "88005353537"));
-        parents.add(new Parents("Maria", 4, "maria@i", "88005353538"));
-        parents.add(new Parents("Olga", 5, "olga@i", "88005353539"));
-
-        service.create(new Enrollment(1, "Masha", 1, LocalDate.now(), Status.New));
-        service.create(new Enrollment(2, "Sasha", 2, LocalDate.now().minusDays(1), Status.Review));
-        service.create(new Enrollment(3, "Dima", 3, LocalDate.now().minusDays(2), Status.Approved));
-        service.create(new Enrollment(4, "Lena", 4, LocalDate.now().minusDays(3), Status.Rejected));
-        service.create(new Enrollment(5, "Nikita", 5, LocalDate.now().minusDays(4), Status.Enrolled));
-        service.create(new Enrollment(6, "Katya", 1, LocalDate.now().minusDays(5), Status.New));
-        service.create(new Enrollment(7, "Misha", 2, LocalDate.now().minusDays(6), Status.Review));
-        service.create(new Enrollment(8, "Sofia", 3, LocalDate.now().minusDays(7), Status.Approved));
-        service.create(new Enrollment(9, "Artem", 4, LocalDate.now().minusDays(8), Status.New));
-        service.create(new Enrollment(10, "Nina", 5, LocalDate.now().minusDays(9), Status.Cancelled));
-
+       
         Scanner scanner = new Scanner(System.in);
         int choice;
         do {
@@ -59,13 +53,14 @@ public class Main {
             System.out.println("11. Read enrollment");
             System.out.println("12. Update enrollment");
             System.out.println("13. Delete enrollment");
-            System.out.println("14. Exit");
+            System.out.println("14. Download all Excel tables");
+            System.out.println("15. Exit");
             System.out.print("Enter your choice: ");
             choice = readInt(scanner, "Invalid input. Please enter a number.");
 
             switch (choice) {
                 case 1:
-                    for (Parents parent : parents) {
+                    for (Parents parent : parentRepository.findAll()) {
                         System.out.println("Parent Name: " + parent.getName());
                         System.out.println("Parent ID: " + parent.getId());
                         System.out.println("Parent Email: " + parent.getEmail());
@@ -134,7 +129,7 @@ public class Main {
                     }
                     break;
                 case 7:
-                    statistics(service, parents.size());
+                    statistics(service, parentRepository.findAll().size());
                     break;
                 case 8:
                     service.findAll().sort(Comparator.comparing(Enrollment::getChildName));
@@ -145,7 +140,7 @@ public class Main {
                     printAll(service);
                     break;
                 case 10:
-                    create(scanner, parents, service);
+                    create(scanner, service);
                     break;
                 case 11:
                     read(scanner, service);
@@ -157,12 +152,15 @@ public class Main {
                     delete(scanner, service);
                     break;
                 case 14:
+                    ExcelExporter.exportAllTables();
+                    break;
+                case 15:
                     System.out.println("Exit");
                     break;
                 default:
                     System.out.println("Invalid choice. Please try again.");
             }
-        } while (choice != 14);
+        } while (choice != 15);
         scanner.close();
     }
 
@@ -208,24 +206,15 @@ public class Main {
         System.out.println("Cancelled applications: " + cancelledCount);
     }
 
-    private static void create(Scanner scanner, ArrayList<Parents> parents, EnrollService service) {
+    private static void create(Scanner scanner, EnrollService service) {
         scanner.nextLine();
         System.out.print("Enter child name: ");
         String childName = scanner.nextLine();
+        System.out.print("Enter parent ID: ");
         int parentId = readInt(scanner, "Parent ID must be a number.");
         try {
             if (childName.isBlank()) {
                 throw new BusinessException("Child name cannot be empty.");
-            }
-            boolean exists = false;
-            for (Parents parent : parents) {
-                if (parent.getId() == parentId) {
-                    exists = true;
-                    break;
-                }
-            }
-            if (!exists) {
-                throw new BusinessException("Parent with this ID does not exist.");
             }
             int newId = 1;
             for (Enrollment enrollment : service.findAll()) {
